@@ -17,17 +17,25 @@ const char ssid[] = "Redmi Note 10 Pro";
 const char password[] = "1sampai8";
 
 
-
+const int buzzer = 14;
 const int raindropPin = 35; // GPIO pin connected to the raindrop sensor FC-37
-const int trigPin = 33; // Defines the trigPin
-const int echoPin = 32; // Defines the echoPin
-long duration, distance; // Defines variables for the duration of the pulse and the distance to the object
+const int trigPin = 33;
+const int echoPin = 32;
+#define SOUND_SPEED 0.0343
+
+long duration;
+float distanceCM;
 int tby = 34;
 #define VPIN_informasi V0
 #define VPIN_jarak V1
 #define VPIN_hujan V2
 #define VPIN_tbdy V3
 #define VPIN_potensi V4
+
+int distance   = 0;
+long tinggi_sensor=13;// tinggi wadah
+
+
 
 // Var fuzzy
     float x1,x2,x3;
@@ -54,9 +62,22 @@ void checkBlynkStatus()
 
 }
 void connect() {
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    lcd.setCursor(0, 0);
+    lcd.print("Connecting");
+
+while (WiFi.status() != WL_CONNECTED) {
+    for (int i = 0; i < 4; i++) {
+      lcd.setCursor(11 + i, 0); // posisi titik mulai dari kolom ke-11
+      lcd.print(".");
+      delay(650); // delay untuk efek animasi
+    }
+    
+    lcd.setCursor(11, 0);
+    lcd.print("    "); // hapus semua titik
+
+    delay(250); // delay sebelum memulai ulang animasi
   }
+ 
 }
 
 //================ Fuzzyfication Jarak air ===========================
@@ -296,12 +317,21 @@ void setup() {
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an OUTPUT
   pinMode(echoPin, INPUT); // Sets the echoPin as an INPUT
   pinMode(raindropPin, INPUT);
+  pinMode(buzzer, OUTPUT);
   timer.setInterval(2000L, checkBlynkStatus);
   WiFi.begin(ssid, password);
-  connect();
-  Blynk.begin(auth, ssid, password, "blynk.cloud", 80);
   lcd.begin();
   lcd.backlight();
+  lcd.setCursor(0, 0);
+  connect();    
+  lcd.clear(); 
+  lcd.setCursor(0, 0);
+  lcd.print("Connected");
+  lcd.setCursor(0,1);
+  lcd.print("Welcomee.....");
+  delay(1500);                     
+  lcd.clear();
+  Blynk.begin(auth, ssid, password, "blynk.cloud", 80);
 }
 
 void loop() 
@@ -310,9 +340,11 @@ void loop()
         delay(10);
         // ================= Raindrop Sensor =================
         int hj = analogRead(raindropPin);
-        int rain = map(hj, 0, 4095, 150, 0);
-        // Serial.print("Rain : ");
-        // Serial.println(rain);
+        int rain = map(hj, 4095,0, 0,150);
+        Serial.print("Rain : ");
+        Serial.println(hj);
+        Serial.print("Rain Kalibrasi: ");
+        Serial.println(rain);
 
         //================== Usonic Sensor ========================
         digitalWrite(trigPin, LOW); 
@@ -321,24 +353,36 @@ void loop()
         delayMicroseconds(10);
         digitalWrite(trigPin, LOW);
         duration = pulseIn(echoPin, HIGH);
-        distance = (duration * 0.0343) / 2;
 
+        distanceCM = duration * SOUND_SPEED/2;
+        distance = tinggi_sensor - distanceCM;
+        //int prosentase = (float)tinggi_Air/tinggi_sensor * 100;
+        
+        Serial.print("Jarak Air : ");
+        Serial.println(distance);
+
+        int mapdistance = map(distance, 0, 10, 0,120);
+        Serial.print("Map Distance : ");
+        Serial.println(mapdistance);
         //================== Turbidity Sensor ========================
         int val_tby = analogRead(tby);
-        int tbdy = map(val_tby, 0, 3952, 150, 0);  
+        int tbdy = map(val_tby, 0, 4095, 0, 150);  
         // int tbdy = val_tby;
-        // Serial.print("Turbidity : ");
-        // Serial.println(tbdy);
+        Serial.print("Turbidity : ");
+        Serial.println(val_tby);
+
+        Serial.print("Tbdy Kalibrasi:");
+        Serial.println(tbdy);
 
         //============================== MAIN ===========================
-        Blynk.virtualWrite(VPIN_jarak, distance);
+        Blynk.virtualWrite(VPIN_jarak, mapdistance);
         Serial.print("Nilai Jarak Air : ");
-        Serial.println (distance);
-        // lcd.clear();
+        Serial.println (mapdistance);
+        
         lcd.setCursor(0,0);
         lcd.print("JA: ");
         lcd.setCursor(3,0);
-        lcd.print(distance);
+        lcd.print(mapdistance);
         // delay(1000);
 
         Blynk.virtualWrite(VPIN_hujan, rain);
@@ -363,9 +407,9 @@ void loop()
 
         Serial.println("============================================");
         //======================= ========== =========================
-        jaJauh = ja_Jauh(distance);
-        jaDekat = ja_Dekat(distance);
-        jaSedang = ja_Sedang(distance);
+        jaJauh = ja_Jauh(mapdistance);
+        jaDekat = ja_Dekat(mapdistance);
+        jaSedang = ja_Sedang(mapdistance);
 
         chTinggi = ch_Tinggi(rain);
         chRendah = ch_Rendah(rain);
@@ -642,19 +686,22 @@ void loop()
             lcd.setCursor(2, 1);
             lcd.print("Rdh");
             // delay(1000);
-        }else if (zTerbobot >= 31 && zTerbobot <=70){
+        }else if (zTerbobot >= 31 && zTerbobot <=40){
             Serial.println("Sedang" );
             Blynk.virtualWrite(VPIN_informasi, "Sedang");
             lcd.setCursor(2, 1);
             lcd.print("Sdg");
             // delay(1000);
-        }else if (zTerbobot >=71 && zTerbobot <=90){
-            Serial.println("Tinggi");
-            Blynk.virtualWrite(VPIN_informasi, "Tinggi");
-            lcd.setCursor(2, 1);
-            lcd.print("Tgi");
-            // delay(1000);
-        }else {
+            }else if (zTerbobot >=41 && zTerbobot <=90){
+                Serial.println("Tinggi");
+                Blynk.virtualWrite(VPIN_informasi, "Tinggi");
+                lcd.setCursor(2, 1);
+                lcd.print("Tgi");
+                tone(buzzer, 300);
+                delay(500);
+                noTone(buzzer);
+                delay(100);
+            }else {
             Serial.println("Tidak Terbobot");
         }
         
